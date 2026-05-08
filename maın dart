@@ -1,0 +1,3396 @@
+import 'dart:async';
+import 'dart:math';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+    ),
+  );
+  runApp(const EhliyetProApp());
+}
+
+// ─────────────────────────── THEME ───────────────────────────
+class AppColors {
+  static const primary = Color(0xFF1565C0);
+  static const primaryDark = Color(0xFF0D47A1);
+  static const primaryLight = Color(0xFF42A5F5);
+  static const accent = Color(0xFFFF6F00);
+  static const accentLight = Color(0xFFFFB300);
+  static const success = Color(0xFF2E7D32);
+  static const error = Color(0xFFC62828);
+  static const warning = Color(0xFFF57F17);
+  static const surface = Color(0xFF0A1628);
+  static const surfaceCard = Color(0xFF112240);
+  static const surfaceLight = Color(0xFF1A3357);
+  static const textPrimary = Color(0xFFE8F0FE);
+  static const textSecondary = Color(0xFF90A4AE);
+  static const gradientStart = Color(0xFF0D47A1);
+  static const gradientEnd = Color(0xFF1565C0);
+}
+
+ThemeData get appTheme => ThemeData(
+  brightness: Brightness.dark,
+  primaryColor: AppColors.primary,
+  scaffoldBackgroundColor: AppColors.surface,
+  colorScheme: const ColorScheme.dark(
+    primary: AppColors.primary,
+    secondary: AppColors.accent,
+    surface: AppColors.surfaceCard,
+    error: AppColors.error,
+  ),
+  fontFamily: 'Roboto',
+  appBarTheme: const AppBarTheme(
+    backgroundColor: Colors.transparent,
+    elevation: 0,
+    iconTheme: IconThemeData(color: AppColors.textPrimary),
+    titleTextStyle: TextStyle(
+      color: AppColors.textPrimary,
+      fontSize: 20,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.5,
+    ),
+  ),
+  cardTheme: CardThemeData(
+    color: Colors.white,
+    elevation: 8,
+    shadowColor: Colors.black54,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+  ),
+  elevatedButtonTheme: ElevatedButtonThemeData(
+    style: ElevatedButton.styleFrom(
+      backgroundColor: AppColors.primary,
+      foregroundColor: Colors.white,
+      elevation: 4,
+      shadowColor: AppColors.primaryDark.withOpacity(0.6),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+      textStyle: const TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.5,
+      ),
+    ),
+  ),
+  useMaterial3: true,
+);
+
+class surfaceCard {}
+
+// ─────────────────────────── DATA MODELS ───────────────────────────
+enum QuestionCategory {
+  trafik,
+  ilkYardim,
+  motor,
+  trafikAdabi,
+  levhalar,
+  aracTeknik,
+  ceza,
+}
+
+extension QuestionCategoryExt on QuestionCategory {
+  String get label {
+    switch (this) {
+      case QuestionCategory.trafik:
+        return 'Trafik ve Çevre';
+      case QuestionCategory.ilkYardim:
+        return 'İlk Yardım';
+      case QuestionCategory.motor:
+        return 'Motor Bilgisi';
+      case QuestionCategory.trafikAdabi:
+        return 'Trafik Adabı';
+      case QuestionCategory.levhalar:
+        return 'Trafik Levhaları';
+      case QuestionCategory.aracTeknik:
+        return 'Araç Tekniği';
+      case QuestionCategory.ceza:
+        return 'Ceza Soruları';
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case QuestionCategory.trafik:
+        return Icons.traffic;
+      case QuestionCategory.ilkYardim:
+        return Icons.medical_services;
+      case QuestionCategory.motor:
+        return Icons.settings;
+      case QuestionCategory.trafikAdabi:
+        return Icons.people;
+      case QuestionCategory.levhalar:
+        return Icons.sign_language;
+      case QuestionCategory.aracTeknik:
+        return Icons.car_repair;
+      case QuestionCategory.ceza:
+        return Icons.gavel;
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case QuestionCategory.trafik:
+        return const Color(0xFF1976D2);
+      case QuestionCategory.ilkYardim:
+        return const Color(0xFFD32F2F);
+      case QuestionCategory.motor:
+        return const Color(0xFF388E3C);
+      case QuestionCategory.trafikAdabi:
+        return const Color(0xFF7B1FA2);
+      case QuestionCategory.levhalar:
+        return const Color(0xFFF57C00);
+      case QuestionCategory.aracTeknik:
+        return const Color(0xFF0097A7);
+      case QuestionCategory.ceza:
+        return const Color(0xFF5D4037);
+    }
+  }
+}
+
+class Question {
+  final String id;
+  final String text;
+  final List<String> options;
+  final int correctIndex;
+  final QuestionCategory category;
+  final String explanation;
+  bool isFavorite;
+  bool isMarked;
+
+  Question({
+    required this.id,
+    required this.text,
+    required this.options,
+    required this.correctIndex,
+    required this.category,
+    required this.explanation,
+    this.isFavorite = false,
+    this.isMarked = false,
+  });
+}
+
+class TrafficSign {
+  final String name;
+  final String description;
+  final String emoji;
+  final String type;
+  const TrafficSign({
+    required this.name,
+    required this.description,
+    required this.emoji,
+    required this.type,
+  });
+}
+
+// ─────────────────────────── QUESTION BANK ───────────────────────────
+class QuestionBank {
+  static final List<Question> all = [
+    // TRAFİK VE ÇEVRE
+    Question(
+      id: 'T001',
+      text: 'Şehir içi yollarda azami hız kaç km/saat\'tir?',
+      options: ['30 km/saat', '50 km/saat', '70 km/saat', '90 km/saat'],
+      correctIndex: 1,
+      category: QuestionCategory.trafik,
+      explanation:
+          'Şehir içi yollarda azami hız sınırı 50 km/saattir. Bu kural Karayolları Trafik Yönetmeliği\'nde belirtilmiştir.',
+    ),
+    Question(
+      id: 'T002',
+      text: 'Bölünmüş yollarda azami hız kaç km/saat\'tir?',
+      options: ['70 km/saat', '90 km/saat', '110 km/saat', '120 km/saat'],
+      correctIndex: 1,
+      category: QuestionCategory.trafik,
+      explanation: 'Bölünmüş yollarda azami hız 90 km/saattir.',
+    ),
+    Question(
+      id: 'T003',
+      text: 'Otoyollarda azami hız kaç km/saat\'tir?',
+      options: ['90 km/saat', '110 km/saat', '120 km/saat', '130 km/saat'],
+      correctIndex: 2,
+      category: QuestionCategory.trafik,
+      explanation: 'Otoyollarda azami hız 120 km/saattir.',
+    ),
+    Question(
+      id: 'T004',
+      text: 'Kavşaklarda geçiş önceliği kime aittir?',
+      options: [
+        'Sol taraftaki araçlara',
+        'Sağ taraftaki araçlara',
+        'Büyük araçlara',
+        'Hızlı giden araçlara',
+      ],
+      correctIndex: 1,
+      category: QuestionCategory.trafik,
+      explanation:
+          'Eşdeğer kavşaklarda geçiş önceliği sağdan gelen araçlara aittir.',
+    ),
+    Question(
+      id: 'T005',
+      text: 'Taşıt yolu üzerinde araç bırakmak hangi durumlarda yasaktır?',
+      options: [
+        'Sadece gece saatlerinde',
+        'Sadece gündüz saatlerinde',
+        'Her zaman yasaktır',
+        'Yalnızca kış aylarında',
+      ],
+      correctIndex: 2,
+      category: QuestionCategory.trafik,
+      explanation: 'Taşıt yolu üzerinde araç bırakmak her zaman yasaktır.',
+    ),
+    Question(
+      id: 'T006',
+      text: 'Refüjlü caddelerde U dönüşü yapılabilir mi?',
+      options: [
+        'Evet, her zaman',
+        'Hayır, hiçbir zaman',
+        'Sadece sol taraftan',
+        'İşaret varsa yapılabilir',
+      ],
+      correctIndex: 3,
+      category: QuestionCategory.trafik,
+      explanation:
+          'Refüjlü caddelerde U dönüşü ancak bunun mümkün olduğunu gösteren işaret varsa yapılabilir.',
+    ),
+    Question(
+      id: 'T007',
+      text: 'Araç kullanırken telefon kullanmak için ne gereklidir?',
+      options: [
+        'Hiçbir şey gerekmez',
+        'Eller serbest cihaz',
+        'Sadece kulaklık yeterli',
+        'Araç park edilmelidir',
+      ],
+      correctIndex: 1,
+      category: QuestionCategory.trafik,
+      explanation:
+          'Araç kullanırken telefon kullanmak için eller serbest (handsfree) cihaz kullanılmalıdır.',
+    ),
+    Question(
+      id: 'T008',
+      text: 'Sis farları hangi durumlarda kullanılır?',
+      options: [
+        'Her zaman',
+        'Gece sürüşlerinde',
+        'Yoğun sis, kar ve yağmurda',
+        'Sadece karlı havalarda',
+      ],
+      correctIndex: 2,
+      category: QuestionCategory.trafik,
+      explanation:
+          'Sis farları yoğun sis, kar ve yağmur gibi görüş mesafesinin azaldığı durumlarda kullanılır.',
+    ),
+
+    // İLK YARDIM
+    Question(
+      id: 'IY001',
+      text:
+          'Trafik kazasında yaralı birini taşıt yolundan uzaklaştırmak ne zaman gerekir?',
+      options: [
+        'Her zaman hemen taşınmalı',
+        'Sadece yangın tehlikesi varsa',
+        'Hiçbir zaman taşınmamalı',
+        'Doktor gelince taşınmalı',
+      ],
+      correctIndex: 1,
+      category: QuestionCategory.ilkYardim,
+      explanation:
+          'Yaralılar yalnızca hayati tehlike (yangın, çökme gibi) varsa taşınmalıdır. Aksi hâlde omurga yaralanması ağırlaşabilir.',
+    ),
+    Question(
+      id: 'IY002',
+      text: 'Kalp masajında dakikada kaç baskı uygulanır?',
+      options: ['30-40 baskı', '60-80 baskı', '100-120 baskı', '150-160 baskı'],
+      correctIndex: 2,
+      category: QuestionCategory.ilkYardim,
+      explanation: 'Kalp masajında dakikada 100-120 baskı uygulanması gerekir.',
+    ),
+    Question(
+      id: 'IY003',
+      text: 'CPR\'da kaç göğüs baskısına kaç solunum yapılır?',
+      options: [
+        '15 baskı / 1 solunum',
+        '30 baskı / 2 solunum',
+        '20 baskı / 4 solunum',
+        '10 baskı / 1 solunum',
+      ],
+      correctIndex: 1,
+      category: QuestionCategory.ilkYardim,
+      explanation: 'CPR\'da 30 göğüs baskısına 2 kurtarma solunumu yapılır.',
+    ),
+    Question(
+      id: 'IY004',
+      text: 'Bilinç kaybı olan kaza yaralısına ne yapılmalıdır?',
+      options: [
+        'Su içirilir',
+        'Koma pozisyonuna alınır',
+        'Yüksek sesle bağırılır',
+        'Soğuk su dökülür',
+      ],
+      correctIndex: 1,
+      category: QuestionCategory.ilkYardim,
+      explanation:
+          'Bilinç kaybı olan yaralı koma (lateral dekübitus) pozisyonuna alınarak hava yolu açık tutulur.',
+    ),
+    Question(
+      id: 'IY005',
+      text: 'Arterden kanama durumunda ne yapılır?',
+      options: [
+        'Yara üstüne merhem sürülür',
+        'Yara temizlenir',
+        'Kalbe yakın taraftan baskı uygulanır',
+        'Yara suyla yıkanır',
+      ],
+      correctIndex: 2,
+      category: QuestionCategory.ilkYardim,
+      explanation:
+          'Arterden kanamalarda kalbe yakın bölgeye baskı uygulanarak kanama durdurulmaya çalışılır.',
+    ),
+
+    // MOTOR BİLGİSİ
+    Question(
+      id: 'M001',
+      text: 'Motor yağı ne zaman kontrol edilmelidir?',
+      options: [
+        'Motor çalışırken',
+        'Motor soğukken ve düz zeminde',
+        'Sadece ısındıktan sonra',
+        'Yalnızca bakımda',
+      ],
+      correctIndex: 1,
+      category: QuestionCategory.motor,
+      explanation:
+          'Motor yağı seviyesi, motor soğukken ve araç düz zeminde park hâlindeyken kontrol edilmelidir.',
+    ),
+    Question(
+      id: 'M002',
+      text: 'Akü kaç volt gerilim üretir?',
+      options: ['6 volt', '12 volt', '24 volt', '48 volt'],
+      correctIndex: 1,
+      category: QuestionCategory.motor,
+      explanation: 'Standart araç aküsü 12 volt gerilim üretir.',
+    ),
+    Question(
+      id: 'M003',
+      text: 'Turbo sistemi ne işe yarar?',
+      options: [
+        'Yakıt tüketimini artırır',
+        'Motor gücünü artırır',
+        'Freni güçlendirir',
+        'Direksiyon kolaylaştırır',
+      ],
+      correctIndex: 1,
+      category: QuestionCategory.motor,
+      explanation:
+          'Turbo, egzoz gazıyla kompresörü döndürerek motora daha fazla hava-yakıt karışımı sağlar ve güç artışı sunar.',
+    ),
+    Question(
+      id: 'M004',
+      text: 'Soğutma suyu ne zaman kontrol edilmelidir?',
+      options: [
+        'Motor çalışırken',
+        'Motor ısındıktan hemen sonra',
+        'Motor tamamen soğukken',
+        'Her gün mutlaka',
+      ],
+      correctIndex: 2,
+      category: QuestionCategory.motor,
+      explanation:
+          'Soğutma suyu (antifriz) seviyesi motor tamamen soğuduktan sonra kontrol edilmelidir; sıcak motor kapağı açılması tehlikelidir.',
+    ),
+
+    // TRAFİK ADABI
+    Question(
+      id: 'TA001',
+      text: 'Yaya geçidine yaklaşırken ne yapılmalıdır?',
+      options: [
+        'Hız artırılır',
+        'Klakson çalınır',
+        'Hız düşürülür ve yayaya yol verilir',
+        'Normal hızda devam edilir',
+      ],
+      correctIndex: 2,
+      category: QuestionCategory.trafikAdabi,
+      explanation:
+          'Yaya geçidine yaklaşan sürücü hızını düşürmeli, geçmekte olan yayalara öncelik tanımalıdır.',
+    ),
+    Question(
+      id: 'TA002',
+      text: 'Ambulans veya itfaiye aracı yaklaşınca ne yapılmalıdır?',
+      options: [
+        'Hız artırılır',
+        'Araç güvenli yere çekilerek yol verilir',
+        'Klakson çalınır',
+        'Aynı hızda devam edilir',
+      ],
+      correctIndex: 1,
+      category: QuestionCategory.trafikAdabi,
+      explanation:
+          'Acil durum araçlarına (ambulans, itfaiye, polis) yol vermek yasal zorunluluktur; araç sağa çekilip durulur.',
+    ),
+    Question(
+      id: 'TA003',
+      text: 'Okul önünde çocuklar geçerken ne yapılmalıdır?',
+      options: [
+        'Klakson çalarak uyarılır',
+        'Hız artırılır',
+        'Araç tamamen durdurulur',
+        'Yavaş geçilir',
+      ],
+      correctIndex: 2,
+      category: QuestionCategory.trafikAdabi,
+      explanation:
+          'Okul önünde çocuklar geçerken araç tamamen durdurulmalı, çocukların güvenli geçişi sağlanmalıdır.',
+    ),
+
+    // TRAFİK LEVHALARI
+    Question(
+      id: 'L001',
+      text: 'Üçgen şeklindeki kırmızı çerçeveli levhalar neyi ifade eder?',
+      options: ['Yasaklama', 'Uyarı', 'Bilgi verme', 'Yönlendirme'],
+      correctIndex: 1,
+      category: QuestionCategory.levhalar,
+      explanation:
+          'Üçgen şeklinde kırmızı çerçeveli levhalar uyarı levhalarıdır; yaklaşan tehlike hakkında sürücüyü bilgilendirir.',
+    ),
+    Question(
+      id: 'L002',
+      text: 'Yuvarlak kırmızı çerçeveli levhalar neyi ifade eder?',
+      options: ['Uyarı', 'Bilgi', 'Yasak ve kısıtlama', 'Zorunluluk'],
+      correctIndex: 2,
+      category: QuestionCategory.levhalar,
+      explanation:
+          'Yuvarlak kırmızı çerçeveli levhalar yasak ve kısıtlama levhalarıdır.',
+    ),
+    Question(
+      id: 'L003',
+      text:
+          'Mavi zemin üzerinde beyaz işaretli yuvarlak levhalar neyi ifade eder?',
+      options: ['Yasak', 'Uyarı', 'Zorunluluk', 'Bilgi'],
+      correctIndex: 2,
+      category: QuestionCategory.levhalar,
+      explanation:
+          'Mavi zemin üzerine beyaz işaretli yuvarlak levhalar zorunluluk (emir) levhalarıdır.',
+    ),
+    Question(
+      id: 'L004',
+      text: '"Dur" levhası hangi biçimdedir?',
+      options: [
+        'Üçgen kırmızı',
+        'Yuvarlak kırmızı',
+        'Sekizgen kırmızı',
+        'Kare kırmızı',
+      ],
+      correctIndex: 2,
+      category: QuestionCategory.levhalar,
+      explanation:
+          '"Dur" (Stop) levhası sekizgen (8 köşeli) kırmızı zemin üzerinde beyaz yazıdan oluşur.',
+    ),
+    Question(
+      id: 'L005',
+      text: '"Yol Ver" levhası nasıl görünür?',
+      options: [
+        'Kare sarı',
+        'Ters üçgen kırmızı-beyaz',
+        'Yuvarlak mavi',
+        'Üçgen sarı',
+      ],
+      correctIndex: 1,
+      category: QuestionCategory.levhalar,
+      explanation:
+          '"Yol Ver" levhası, tepesi aşağıda beyaz üçgen içinde kırmızı çerçeveli ters üçgen biçimindedir.',
+    ),
+
+    // ARAÇ TEKNİĞİ
+    Question(
+      id: 'AT001',
+      text: 'ABS sistemi ne işe yarar?',
+      options: [
+        'Motor gücünü artırır',
+        'Fren sırasında tekerleklerin kilitlenmesini önler',
+        'Yakıt tasarrufu sağlar',
+        'Direksiyon sertleştirir',
+      ],
+      correctIndex: 1,
+      category: QuestionCategory.aracTeknik,
+      explanation:
+          'ABS (Anti-lock Braking System) frenleme sırasında tekerleklerin kilitlenmesini önler, araç kontrolünü korur.',
+    ),
+    Question(
+      id: 'AT002',
+      text: 'ESP sistemi ne işe yarar?',
+      options: [
+        'Yakıt pompalar',
+        'Aracın dengesini korur',
+        'Motor soğutur',
+        'Fren güçlendirir',
+      ],
+      correctIndex: 1,
+      category: QuestionCategory.aracTeknik,
+      explanation:
+          'ESP (Electronic Stability Program) viraj ve kaygan zeminde aracın dengesini elektronik olarak korur.',
+    ),
+    Question(
+      id: 'AT003',
+      text: 'Lastik basıncı düşük olduğunda ne olur?',
+      options: [
+        'Yakıt tasarrufu artar',
+        'Frenleme mesafesi kısalır',
+        'Lastik ısınır ve patlama riski artar',
+        'Araç daha stabil olur',
+      ],
+      correctIndex: 2,
+      category: QuestionCategory.aracTeknik,
+      explanation:
+          'Lastik basıncı düşük olduğunda sürtünme artar, lastik aşırı ısınır ve patlama riski ortaya çıkar.',
+    ),
+
+    // CEZA SORULARI
+    Question(
+      id: 'C001',
+      text: 'Kırmızı ışık ihlali yapan sürücüye uygulanacak ceza nedir?',
+      options: [
+        '500 TL',
+        '1000 TL idari para cezası',
+        'Uyarı',
+        'Sadece puan cezası',
+      ],
+      correctIndex: 1,
+      category: QuestionCategory.ceza,
+      explanation:
+          'Kırmızı ışık ihlalinde idari para cezası ve ehliyete puan uygulanır (güncel tutar yönetmeliğe göre belirlenir).',
+    ),
+    Question(
+      id: 'C002',
+      text: 'Emniyet kemeri takmayan sürücüye ne ceza verilir?',
+      options: [
+        'Sadece uyarı',
+        'İdari para cezası',
+        'Ehliyet iptali',
+        'Araç müsaderesi',
+      ],
+      correctIndex: 1,
+      category: QuestionCategory.ceza,
+      explanation:
+          'Emniyet kemeri takmayan sürücüye idari para cezası uygulanır.',
+    ),
+    Question(
+      id: 'C003',
+      text: 'Alkollü araç kullanmanın cezası nedir?',
+      options: [
+        'Sadece para cezası',
+        'Sadece ehliyet iptali',
+        'Para cezası, ehliyet geri alınması ve yasal işlem',
+        'Yalnızca uyarı',
+      ],
+      correctIndex: 2,
+      category: QuestionCategory.ceza,
+      explanation:
+          'Alkollü araç kullanmak; para cezası, ehliyetin geçici geri alınması ve yasal kovuşturmayı birlikte getirir.',
+    ),
+    Question(
+      id: 'C004',
+      text: 'Hız sınırını % 30\'dan fazla aşmanın yaptırımı nedir?',
+      options: [
+        'Sadece uyarı',
+        'Para cezası ve 10 puan',
+        'Araç bağlanması',
+        'Para cezası, puan ve ehliyet askıya alınması',
+      ],
+      correctIndex: 3,
+      category: QuestionCategory.ceza,
+      explanation:
+          'Hız sınırını %30\'dan fazla aşmak; para cezası, puan ve ehliyetin askıya alınmasını gerektirir.',
+    ),
+  ];
+
+  static List<Question> byCategory(QuestionCategory cat) =>
+      all.where((q) => q.category == cat).toList();
+
+  static List<Question> random(int count) {
+    final list = List<Question>.from(all);
+    list.shuffle(Random());
+    return list.take(count.clamp(0, list.length)).toList();
+  }
+
+  static List<Question> examSet() => random(50);
+}
+
+// ─────────────────────────── TRAFFIC SIGNS DATA ───────────────────────────
+const List<TrafficSign> trafficSigns = [
+  TrafficSign(
+    name: 'Dur',
+    description:
+        'Sürücü aracını tamamen durdurmalı ve yol güvenli olduğunda geçmelidir.',
+    emoji: '🛑',
+    type: 'Düzenleyici',
+  ),
+  TrafficSign(
+    name: 'Yol Ver',
+    description: 'Ana yoldan gelenlere geçiş hakkı tanınmalıdır.',
+    emoji: '⚠️',
+    type: 'Düzenleyici',
+  ),
+  TrafficSign(
+    name: 'Hız Sınırı 50',
+    description: 'Bu işaretten sonra azami hız 50 km/saattir.',
+    emoji: '🔵',
+    type: 'Düzenleyici',
+  ),
+  TrafficSign(
+    name: 'Girilmez',
+    description: 'İşaret edilen yöne araç ile girilmesi yasaktır.',
+    emoji: '🚫',
+    type: 'Yasak',
+  ),
+  TrafficSign(
+    name: 'Park Yapılmaz',
+    description: 'Bu levha sınırları içinde park etmek yasaktır.',
+    emoji: '🅿️',
+    type: 'Yasak',
+  ),
+  TrafficSign(
+    name: 'Sollama Yasak',
+    description: 'Soldaki levha geçerliyken sollamak yasaktır.',
+    emoji: '🚗',
+    type: 'Yasak',
+  ),
+  TrafficSign(
+    name: 'Tehlikeli Viraj',
+    description: 'İleride tehlikeli (sağa/sola) viraj bulunmaktadır.',
+    emoji: '↩️',
+    type: 'Uyarı',
+  ),
+  TrafficSign(
+    name: 'Demiryolu Geçidi',
+    description: 'İleride hemzemin demiryolu geçidi vardır.',
+    emoji: '🚂',
+    type: 'Uyarı',
+  ),
+  TrafficSign(
+    name: 'Yaya Geçidi',
+    description: 'İleride yaya geçidi bulunmaktadır, dikkatli olunuz.',
+    emoji: '🚶',
+    type: 'Uyarı',
+  ),
+  TrafficSign(
+    name: 'Okul Geçidi',
+    description: 'İleride okul geçidi vardır, yavaşlayınız.',
+    emoji: '🏫',
+    type: 'Uyarı',
+  ),
+  TrafficSign(
+    name: 'İlk Yardım',
+    description: 'İleride ilk yardım (sağlık) noktası bulunmaktadır.',
+    emoji: '🏥',
+    type: 'Bilgi',
+  ),
+  TrafficSign(
+    name: 'Otoyol Başlangıcı',
+    description: 'Otoyol başlangıcını gösterir, kurallara uyunuz.',
+    emoji: '🛣️',
+    type: 'Bilgi',
+  ),
+];
+
+// ─────────────────────────── STATE MANAGEMENT ───────────────────────────
+class AppState extends ChangeNotifier {
+  int _currentNavIndex = 0;
+  int get currentNavIndex => _currentNavIndex;
+
+  // Stats
+  int totalSolved = 0;
+  int totalCorrect = 0;
+  int currentStreak = 7;
+  int xp = 1250;
+  int level = 5;
+  List<String> favoriteIds = [];
+  Map<QuestionCategory, int> categoryScores = {};
+  List<ExamResult> examHistory = [];
+
+  void setNavIndex(int index) {
+    _currentNavIndex = index;
+    notifyListeners();
+  }
+
+  double get successRate => totalSolved == 0 ? 0 : totalCorrect / totalSolved;
+
+  void recordAnswer({
+    required bool correct,
+    required QuestionCategory category,
+  }) {
+    totalSolved++;
+    if (correct) {
+      totalCorrect++;
+      xp += 10;
+      categoryScores[category] = (categoryScores[category] ?? 0) + 1;
+    }
+    level = (xp / 500).floor() + 1;
+    notifyListeners();
+  }
+
+  void toggleFavorite(String id) {
+    if (favoriteIds.contains(id)) {
+      favoriteIds.remove(id);
+    } else {
+      favoriteIds.add(id);
+    }
+    notifyListeners();
+  }
+
+  void addExamResult(ExamResult result) {
+    examHistory.insert(0, result);
+    notifyListeners();
+  }
+}
+
+class ExamResult {
+  final int correct;
+  final int wrong;
+  final int empty;
+  final int totalQuestions;
+  final Duration duration;
+  final DateTime date;
+  final double score;
+  final bool passed;
+
+  ExamResult({
+    required this.correct,
+    required this.wrong,
+    required this.empty,
+    required this.totalQuestions,
+    required this.duration,
+    required this.score,
+    required this.passed,
+  }) : date = DateTime.now();
+}
+
+// ─────────────────────────── MAIN APP ───────────────────────────
+class EhliyetProApp extends StatefulWidget {
+  const EhliyetProApp({super.key});
+  @override
+  State<EhliyetProApp> createState() => _EhliyetProAppState();
+}
+
+class _EhliyetProAppState extends State<EhliyetProApp> {
+  final AppState _appState = AppState();
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _appState,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'Ehliyet Pro Türkiye',
+          debugShowCheckedModeBanner: false,
+          theme: appTheme,
+          home: SplashScreen(appState: _appState),
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────── SPLASH SCREEN ───────────────────────────
+class SplashScreen extends StatefulWidget {
+  final AppState appState;
+  const SplashScreen({super.key, required this.appState});
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _fade;
+  late Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+    _fade = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeIn));
+    _scale = Tween<double>(
+      begin: 0.7,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.elasticOut));
+    _ctrl.forward();
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          PageRouteBuilder(
+            pageBuilder: (_, __, ___) => MainShell(appState: widget.appState),
+            transitionDuration: const Duration(milliseconds: 600),
+            transitionsBuilder: (_, anim, __, child) =>
+                FadeTransition(opacity: anim, child: child),
+          ),
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF0A1628), Color(0xFF0D47A1), Color(0xFF1565C0)],
+          ),
+        ),
+        child: Center(
+          child: FadeTransition(
+            opacity: _fade,
+            child: ScaleTransition(
+              scale: _scale,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const LinearGradient(
+                        colors: [AppColors.primaryLight, AppColors.accent],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primaryLight.withOpacity(0.5),
+                          blurRadius: 40,
+                          spreadRadius: 10,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.directions_car,
+                      size: 64,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  const Text(
+                    'Ehliyet Pro',
+                    style: TextStyle(
+                      fontSize: 42,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  const Text(
+                    'TÜRKİYE',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.accentLight,
+                      letterSpacing: 8,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Sürücü Sınavına Hazırlık',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 60),
+                  SizedBox(
+                    width: 200,
+                    child: LinearProgressIndicator(
+                      backgroundColor: Colors.white24,
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        AppColors.accentLight,
+                      ),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────── MAIN SHELL ───────────────────────────
+class MainShell extends StatelessWidget {
+  final AppState appState;
+  const MainShell({super.key, required this.appState});
+
+  static const List<Widget> Function(AppState) _screenBuilders = _buildScreens;
+  static List<Widget> _buildScreens(AppState s) => [
+    HomeScreen(appState: s),
+    CategoryScreen(appState: s),
+    ExamScreen(appState: s),
+    SignsScreen(),
+    ProfileScreen(appState: s),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: appState,
+      builder: (context, _) {
+        final screens = _buildScreens(appState);
+        return Scaffold(
+          body: IndexedStack(
+            index: appState.currentNavIndex,
+            children: screens,
+          ),
+          bottomNavigationBar: _BottomNav(appState: appState),
+        );
+      },
+    );
+  }
+}
+
+class _BottomNav extends StatelessWidget {
+  final AppState appState;
+  const _BottomNav({required this.appState});
+
+  @override
+  Widget build(BuildContext context) {
+    const items = [
+      BottomNavigationBarItem(
+        icon: Icon(Icons.home_rounded),
+        label: 'Ana Sayfa',
+      ),
+      BottomNavigationBarItem(icon: Icon(Icons.quiz_rounded), label: 'Testler'),
+      BottomNavigationBarItem(icon: Icon(Icons.timer_rounded), label: 'Deneme'),
+      BottomNavigationBarItem(
+        icon: Icon(Icons.traffic_rounded),
+        label: 'Levhalar',
+      ),
+      BottomNavigationBarItem(
+        icon: Icon(Icons.person_rounded),
+        label: 'Profil',
+      ),
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceCard,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.4),
+            blurRadius: 20,
+            offset: const Offset(0, -5),
+          ),
+        ],
+      ),
+      child: BottomNavigationBar(
+        currentIndex: appState.currentNavIndex,
+        onTap: appState.setNavIndex,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: AppColors.primaryLight,
+        unselectedItemColor: AppColors.textSecondary,
+        selectedFontSize: 11,
+        unselectedFontSize: 11,
+        items: items,
+      ),
+    );
+  }
+}
+
+// ─────────────────────────── HOME SCREEN ───────────────────────────
+class HomeScreen extends StatelessWidget {
+  final AppState appState;
+  const HomeScreen({super.key, required this.appState});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 200,
+            pinned: true,
+            flexibleSpace: FlexibleSpaceBar(
+              background: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF0D47A1),
+                      Color(0xFF1565C0),
+                      Color(0xFF1976D2),
+                    ],
+                  ),
+                ),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const CircleAvatar(
+                              radius: 24,
+                              backgroundColor: Colors.white24,
+                              child: Icon(Icons.person, color: Colors.white),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Hoş geldin! 👋',
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  const Text(
+                                    'Sürücü Adayı',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 17,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.accent,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.local_fire_department,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '${appState.currentStreak} gün',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
+                        _XPBar(xp: appState.xp, level: appState.level),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.all(16),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                _StatsRow(appState: appState),
+                const SizedBox(height: 20),
+                _QuickActions(appState: appState),
+                const SizedBox(height: 20),
+                _SectionTitle('Konu Kategorileri'),
+                const SizedBox(height: 12),
+                _CategoryGrid(appState: appState),
+                const SizedBox(height: 20),
+                _SectionTitle('Başarım Rozeti'),
+                const SizedBox(height: 12),
+                _BadgeRow(),
+                const SizedBox(height: 100),
+              ]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _XPBar extends StatelessWidget {
+  final int xp, level;
+  const _XPBar({required this.xp, required this.level});
+  @override
+  Widget build(BuildContext context) {
+    final progress = (xp % 500) / 500;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Seviye $level',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            Text(
+              '$xp XP',
+              style: const TextStyle(
+                color: AppColors.accentLight,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: LinearProgressIndicator(
+            value: progress,
+            minHeight: 8,
+            backgroundColor: Colors.white24,
+            valueColor: const AlwaysStoppedAnimation<Color>(
+              AppColors.accentLight,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatsRow extends StatelessWidget {
+  final AppState appState;
+  const _StatsRow({required this.appState});
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _StatCard(
+          'Çözülen',
+          '${appState.totalSolved}',
+          Icons.quiz,
+          AppColors.primaryLight,
+        ),
+        const SizedBox(width: 12),
+        _StatCard(
+          'Başarı',
+          '${(appState.successRate * 100).toStringAsFixed(0)}%',
+          Icons.trending_up,
+          AppColors.success,
+        ),
+        const SizedBox(width: 12),
+        _StatCard(
+          'XP Puanı',
+          '${appState.xp}',
+          Icons.star,
+          AppColors.accentLight,
+        ),
+      ],
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final String label, value;
+  final IconData icon;
+  final Color color;
+  const _StatCard(this.label, this.value, this.icon, this.color);
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceCard,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 6),
+            Text(
+              value,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w800,
+                fontSize: 20,
+              ),
+            ),
+            Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickActions extends StatelessWidget {
+  final AppState appState;
+  const _QuickActions({required this.appState});
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionTitle('Hızlı Başlat'),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _ActionBtn(
+                label: 'Rastgele Test',
+                icon: Icons.shuffle,
+                color: AppColors.primary,
+                onTap: () {
+                  final qs = QuestionBank.random(10);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => TestPlayScreen(
+                        questions: qs,
+                        appState: appState,
+                        title: 'Rastgele Test',
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _ActionBtn(
+                label: 'Deneme Sınavı',
+                icon: Icons.timer,
+                color: AppColors.accent,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => RealExamScreen(appState: appState),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ActionBtn extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  const _ActionBtn({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [color, color.withOpacity(0.7)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: Colors.white, size: 32),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryGrid extends StatelessWidget {
+  final AppState appState;
+  const _CategoryGrid({required this.appState});
+  @override
+  Widget build(BuildContext context) {
+    final cats = QuestionCategory.values;
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        childAspectRatio: 1.7,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+      ),
+      itemCount: cats.length,
+      itemBuilder: (_, i) {
+        final cat = cats[i];
+        final count = QuestionBank.byCategory(cat).length;
+        return GestureDetector(
+          onTap: () {
+            final qs = QuestionBank.byCategory(cat);
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => TestPlayScreen(
+                  questions: qs,
+                  appState: appState,
+                  title: cat.label,
+                ),
+              ),
+            );
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.surfaceCard,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: cat.color.withOpacity(0.4)),
+            ),
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Icon(cat.icon, color: cat.color, size: 28),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      cat.label,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                    Text(
+                      '$count soru',
+                      style: TextStyle(color: cat.color, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _BadgeRow extends StatelessWidget {
+  final badges = const [
+    ('🏆', 'Şampiyon', true),
+    ('⚡', 'Hızlı', true),
+    ('🔥', '7 Günlük', true),
+    ('🎯', 'Keskin', false),
+    ('💎', 'Premium', false),
+  ];
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 80,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: badges.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (_, i) {
+          final (emoji, name, earned) = badges[i];
+          return Column(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: earned
+                      ? AppColors.accentLight.withOpacity(0.2)
+                      : AppColors.surfaceLight,
+                  border: Border.all(
+                    color: earned ? AppColors.accentLight : Colors.transparent,
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    earned ? emoji : '🔒',
+                    style: const TextStyle(fontSize: 24),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                name,
+                style: TextStyle(
+                  color: earned
+                      ? AppColors.accentLight
+                      : AppColors.textSecondary,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+Widget _SectionTitle(String title) => Text(
+  title,
+  style: const TextStyle(
+    color: AppColors.textPrimary,
+    fontSize: 18,
+    fontWeight: FontWeight.w800,
+  ),
+);
+
+// ─────────────────────────── CATEGORY SCREEN ───────────────────────────
+class CategoryScreen extends StatelessWidget {
+  final AppState appState;
+  const CategoryScreen({super.key, required this.appState});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Konu Testleri')),
+      body: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: QuestionCategory.values.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (_, i) {
+          final cat = QuestionCategory.values[i];
+          final qs = QuestionBank.byCategory(cat);
+          return _CategoryListTile(
+            cat: cat,
+            count: qs.length,
+            appState: appState,
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _CategoryListTile extends StatelessWidget {
+  final QuestionCategory cat;
+  final int count;
+  final AppState appState;
+  const _CategoryListTile({
+    required this.cat,
+    required this.count,
+    required this.appState,
+  });
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        final qs = QuestionBank.byCategory(cat);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => TestPlayScreen(
+              questions: qs,
+              appState: appState,
+              title: cat.label,
+            ),
+          ),
+        );
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surfaceCard,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: cat.color.withOpacity(0.3)),
+        ),
+        padding: const EdgeInsets.all(18),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: cat.color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(cat.icon, color: cat.color, size: 28),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    cat.label,
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Text(
+                    '$count soru mevcut',
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios,
+              color: AppColors.textSecondary,
+              size: 16,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────── TEST PLAY SCREEN ───────────────────────────
+class TestPlayScreen extends StatefulWidget {
+  final List<Question> questions;
+  final AppState appState;
+  final String title;
+  const TestPlayScreen({
+    super.key,
+    required this.questions,
+    required this.appState,
+    required this.title,
+  });
+  @override
+  State<TestPlayScreen> createState() => _TestPlayScreenState();
+}
+
+class _TestPlayScreenState extends State<TestPlayScreen> {
+  int _currentIndex = 0;
+  int? _selectedAnswer;
+  bool _answered = false;
+  Map<int, int> _answers = {};
+  Map<int, bool> _isCorrect = {};
+
+  Question get current => widget.questions[_currentIndex];
+
+  void _selectAnswer(int idx) {
+    if (_answered) return;
+    setState(() {
+      _selectedAnswer = idx;
+      _answered = true;
+      _answers[_currentIndex] = idx;
+      final correct = idx == current.correctIndex;
+      _isCorrect[_currentIndex] = correct;
+      widget.appState.recordAnswer(
+        correct: correct,
+        category: current.category,
+      );
+    });
+  }
+
+  void _next() {
+    if (_currentIndex < widget.questions.length - 1) {
+      setState(() {
+        _currentIndex++;
+        _selectedAnswer = _answers[_currentIndex];
+        _answered = _answers.containsKey(_currentIndex);
+      });
+    } else {
+      _showResults();
+    }
+  }
+
+  void _showResults() {
+    final correct = _isCorrect.values.where((v) => v).length;
+    final wrong = _isCorrect.values.where((v) => !v).length;
+    final empty = widget.questions.length - _answers.length;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surfaceCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (_) => _ResultModal(
+        correct: correct,
+        wrong: wrong,
+        empty: empty,
+        total: widget.questions.length,
+        onClose: () {
+          Navigator.pop(context);
+          Navigator.pop(context);
+        },
+      ),
+    );
+  }
+
+  Color _optionColor(int idx) {
+    if (!_answered) return AppColors.surfaceLight;
+    if (idx == current.correctIndex) return AppColors.success.withOpacity(0.3);
+    if (idx == _selectedAnswer && idx != current.correctIndex)
+      return AppColors.error.withOpacity(0.3);
+    return AppColors.surfaceLight;
+  }
+
+  Color _optionBorder(int idx) {
+    if (!_answered) return Colors.transparent;
+    if (idx == current.correctIndex) return AppColors.success;
+    if (idx == _selectedAnswer && idx != current.correctIndex)
+      return AppColors.error;
+    return Colors.transparent;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = (_currentIndex + 1) / widget.questions.length;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          IconButton(
+            icon: Icon(
+              current.isFavorite ? Icons.bookmark : Icons.bookmark_border,
+              color: AppColors.accentLight,
+            ),
+            onPressed: () {
+              setState(() {
+                current.isFavorite = !current.isFavorite;
+              });
+              widget.appState.toggleFavorite(current.id);
+            },
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Soru ${_currentIndex + 1} / ${widget.questions.length}',
+                      style: const TextStyle(color: AppColors.textSecondary),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: current.category.color.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        current.category.label,
+                        style: TextStyle(
+                          color: current.category.color,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 6,
+                    backgroundColor: AppColors.surfaceLight,
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      AppColors.primaryLight,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceCard,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      current.text,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  ...List.generate(current.options.length, (i) {
+                    final letter = String.fromCharCode(65 + i);
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: GestureDetector(
+                        onTap: () => _selectAnswer(i),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: _optionColor(i),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: _optionBorder(i),
+                              width: 2,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: AppColors.surfaceCard,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    letter,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.primaryLight,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  current.options[i],
+                                  style: const TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ),
+                              if (_answered && i == current.correctIndex)
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: AppColors.success,
+                                ),
+                              if (_answered &&
+                                  i == _selectedAnswer &&
+                                  i != current.correctIndex)
+                                const Icon(
+                                  Icons.cancel,
+                                  color: AppColors.error,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                  if (_answered) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryLight.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: AppColors.primaryLight.withOpacity(0.3),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(
+                                Icons.lightbulb,
+                                color: AppColors.accentLight,
+                                size: 18,
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'Açıklama',
+                                style: TextStyle(
+                                  color: AppColors.accentLight,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            current.explanation,
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _answered ? _next : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _answered
+                      ? AppColors.primary
+                      : AppColors.surfaceLight,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: Text(
+                  _currentIndex < widget.questions.length - 1
+                      ? 'Sonraki Soru →'
+                      : 'Sonuçları Gör',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResultModal extends StatelessWidget {
+  final int correct, wrong, empty, total;
+  final VoidCallback onClose;
+  const _ResultModal({
+    required this.correct,
+    required this.wrong,
+    required this.empty,
+    required this.total,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final score = (correct * 2.0 / total * 100).clamp(0.0, 100.0);
+    final passed = score >= 70;
+    return Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            passed ? '🎉 TEBRİKLER!' : '😔 YETERSİZ',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+              color: passed ? AppColors.success : AppColors.error,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            passed ? 'Sınavı geçtiniz!' : 'Tekrar deneyin',
+            style: const TextStyle(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 28),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _ResultItem('✅ Doğru', '$correct', AppColors.success),
+              _ResultItem('❌ Yanlış', '$wrong', AppColors.error),
+              _ResultItem('⬜ Boş', '$empty', AppColors.textSecondary),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 40),
+            decoration: BoxDecoration(
+              color: (passed ? AppColors.success : AppColors.error).withOpacity(
+                0.15,
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              '${score.toStringAsFixed(0)} Puan',
+              style: TextStyle(
+                fontSize: 40,
+                fontWeight: FontWeight.w900,
+                color: passed ? AppColors.success : AppColors.error,
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: onClose,
+              child: const Text('Tamam'),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResultItem extends StatelessWidget {
+  final String label, value;
+  final Color color;
+  const _ResultItem(this.label, this.value, this.color);
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w900,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────── EXAM SCREEN ───────────────────────────
+class ExamScreen extends StatelessWidget {
+  final AppState appState;
+  const ExamScreen({super.key, required this.appState});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Deneme Sınavı')),
+      body: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            _ExamModeCard(
+              title: 'Gerçek Sınav Modu',
+              subtitle: '50 Soru • 45 Dakika • MEB Format',
+              icon: Icons.school,
+              color: AppColors.primary,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => RealExamScreen(appState: appState),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _ExamModeCard(
+              title: 'Hızlı Test',
+              subtitle: '10 Soru • Süresiz • Rastgele Konu',
+              icon: Icons.flash_on,
+              color: AppColors.accent,
+              onTap: () {
+                final qs = QuestionBank.random(10);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => TestPlayScreen(
+                      questions: qs,
+                      appState: appState,
+                      title: 'Hızlı Test',
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            _ExamModeCard(
+              title: 'Sınav Geçmişi',
+              subtitle: '${appState.examHistory.length} sınav tamamlandı',
+              icon: Icons.history,
+              color: const Color(0xFF7B1FA2),
+              onTap: () => _showHistory(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showHistory(BuildContext context) {
+    if (appState.examHistory.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Henüz sınav tamamlanmadı.')),
+      );
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surfaceCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          const Text(
+            'Sınav Geçmişi',
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w800,
+              fontSize: 18,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ...appState.examHistory.map(
+            (r) => ListTile(
+              leading: Icon(
+                r.passed ? Icons.check_circle : Icons.cancel,
+                color: r.passed ? AppColors.success : AppColors.error,
+              ),
+              title: Text(
+                '${r.score.toStringAsFixed(0)} Puan',
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              subtitle: Text(
+                '${r.correct}D ${r.wrong}Y ${r.empty}B',
+                style: const TextStyle(color: AppColors.textSecondary),
+              ),
+              trailing: Text(
+                r.passed ? 'GEÇTİ' : 'KALDI',
+                style: TextStyle(
+                  color: r.passed ? AppColors.success : AppColors.error,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExamModeCard extends StatelessWidget {
+  final String title, subtitle;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  const _ExamModeCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [color.withOpacity(0.3), color.withOpacity(0.1)],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withOpacity(0.4)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(icon, color: color, size: 32),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 17,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios, color: color, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────── REAL EXAM SCREEN ───────────────────────────
+class RealExamScreen extends StatefulWidget {
+  final AppState appState;
+  const RealExamScreen({super.key, required this.appState});
+  @override
+  State<RealExamScreen> createState() => _RealExamScreenState();
+}
+
+class _RealExamScreenState extends State<RealExamScreen> {
+  late List<Question> _questions;
+  int _currentIndex = 0;
+  Map<int, int> _answers = {};
+  Map<int, bool> _marked = {};
+  int _remainingSeconds = 45 * 60;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _questions = QuestionBank.random(min(QuestionBank.all.length, 20));
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (_remainingSeconds <= 0) {
+        t.cancel();
+        _finishExam();
+      } else {
+        setState(() => _remainingSeconds--);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String get _timeStr {
+    final m = _remainingSeconds ~/ 60;
+    final s = _remainingSeconds % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  bool get _isUrgent => _remainingSeconds < 300;
+
+  void _finishExam() {
+    _timer?.cancel();
+    int correct = 0, wrong = 0;
+    for (int i = 0; i < _questions.length; i++) {
+      final ans = _answers[i];
+      if (ans == null) continue;
+      if (ans == _questions[i].correctIndex)
+        correct++;
+      else
+        wrong++;
+    }
+    final empty = _questions.length - _answers.length;
+    final score = (correct / _questions.length * 100).clamp(0.0, 100.0);
+    final passed = score >= 70;
+    final result = ExamResult(
+      correct: correct,
+      wrong: wrong,
+      empty: empty,
+      totalQuestions: _questions.length,
+      duration: Duration(seconds: 45 * 60 - _remainingSeconds),
+      score: score,
+      passed: passed,
+    );
+    widget.appState.addExamResult(result);
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            ExamResultScreen(result: result, appState: widget.appState),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final q = _questions[_currentIndex];
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Deneme Sınavı'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: _isUrgent
+                      ? AppColors.error.withOpacity(0.2)
+                      : AppColors.primary.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _isUrgent ? AppColors.error : AppColors.primaryLight,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.timer,
+                      size: 16,
+                      color: _isUrgent
+                          ? AppColors.error
+                          : AppColors.primaryLight,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _timeStr,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: _isUrgent
+                            ? AppColors.error
+                            : AppColors.primaryLight,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Progress
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${_currentIndex + 1}/${_questions.length}',
+                      style: const TextStyle(color: AppColors.textSecondary),
+                    ),
+                    Text(
+                      '${_answers.length} cevaplandı',
+                      style: const TextStyle(color: AppColors.primaryLight),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: (_currentIndex + 1) / _questions.length,
+                    minHeight: 5,
+                    backgroundColor: AppColors.surfaceLight,
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      AppColors.primaryLight,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Question Navigator
+          SizedBox(
+            height: 44,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemCount: _questions.length,
+              itemBuilder: (_, i) {
+                Color c;
+                if (i == _currentIndex)
+                  c = AppColors.primary;
+                else if (_answers.containsKey(i))
+                  c = AppColors.success;
+                else if (_marked[i] == 1)
+                  c = AppColors.warning;
+                else
+                  c = AppColors.surfaceLight;
+                return GestureDetector(
+                  onTap: () => setState(() => _currentIndex = i),
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    decoration: BoxDecoration(
+                      color: c,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Center(
+                      child: Text(
+                        '${i + 1}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceCard,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      q.text,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ...List.generate(q.options.length, (i) {
+                    final selected = _answers[_currentIndex] == i;
+                    final letter = String.fromCharCode(65 + i);
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: GestureDetector(
+                        onTap: () =>
+                            setState(() => _answers[_currentIndex] = i),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? AppColors.primary.withOpacity(0.2)
+                                : AppColors.surfaceLight,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: selected
+                                  ? AppColors.primaryLight
+                                  : Colors.transparent,
+                              width: 2,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 30,
+                                height: 30,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: selected
+                                      ? AppColors.primary
+                                      : AppColors.surfaceCard,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    letter,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      color: selected
+                                          ? Colors.white
+                                          : AppColors.textSecondary,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  q.options[i],
+                                  style: TextStyle(
+                                    color: selected
+                                        ? AppColors.textPrimary
+                                        : AppColors.textSecondary,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+          // Nav buttons
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                if (_currentIndex > 0)
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => setState(() => _currentIndex--),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.textSecondary,
+                        side: const BorderSide(color: AppColors.surfaceLight),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: const Text('← Önceki'),
+                    ),
+                  ),
+                if (_currentIndex > 0) const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: _currentIndex < _questions.length - 1
+                      ? ElevatedButton(
+                          onPressed: () => setState(() => _currentIndex++),
+                          child: const Text('Sonraki →'),
+                        )
+                      : ElevatedButton(
+                          onPressed: _finishExam,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.success,
+                          ),
+                          child: const Text('Sınavı Bitir ✓'),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────── EXAM RESULT SCREEN ───────────────────────────
+class ExamResultScreen extends StatelessWidget {
+  final ExamResult result;
+  final AppState appState;
+  const ExamResultScreen({
+    super.key,
+    required this.result,
+    required this.appState,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: result.passed
+                ? [const Color(0xFF1B5E20), AppColors.surface]
+                : [const Color(0xFF7F0000), AppColors.surface],
+          ),
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                const SizedBox(height: 32),
+                Text(
+                  result.passed ? '🎉' : '😔',
+                  style: const TextStyle(fontSize: 80),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  result.passed ? 'SINAVI GEÇTİNİZ!' : 'SINAVDA KALDI',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w900,
+                    color: result.passed ? AppColors.success : AppColors.error,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  result.passed
+                      ? 'Tebrikler, harika bir performans!'
+                      : 'Üzülme, tekrar deneyebilirsin!',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 40),
+                Container(
+                  width: 160,
+                  height: 160,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: (result.passed ? AppColors.success : AppColors.error)
+                        .withOpacity(0.15),
+                    border: Border.all(
+                      color: result.passed
+                          ? AppColors.success
+                          : AppColors.error,
+                      width: 4,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '${result.score.toStringAsFixed(0)}',
+                        style: TextStyle(
+                          fontSize: 52,
+                          fontWeight: FontWeight.w900,
+                          color: result.passed
+                              ? AppColors.success
+                              : AppColors.error,
+                        ),
+                      ),
+                      Text(
+                        'Puan',
+                        style: TextStyle(
+                          color: result.passed
+                              ? AppColors.success
+                              : AppColors.error,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 40),
+                Row(
+                  children: [
+                    _ResultTile(
+                      '✅ Doğru',
+                      '${result.correct}',
+                      AppColors.success,
+                    ),
+                    const SizedBox(width: 12),
+                    _ResultTile('❌ Yanlış', '${result.wrong}', AppColors.error),
+                    const SizedBox(width: 12),
+                    _ResultTile(
+                      '⬜ Boş',
+                      '${result.empty}',
+                      AppColors.textSecondary,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 40),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.pop(context);
+                    },
+                    icon: const Icon(Icons.home),
+                    label: const Text('Ana Sayfaya Dön'),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => RealExamScreen(appState: appState),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Tekrar Dene'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primaryLight,
+                      side: const BorderSide(color: AppColors.primaryLight),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ResultTile extends StatelessWidget {
+  final String label, value;
+  final Color color;
+  const _ResultTile(this.label, this.value, this.color);
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.w900,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────── TRAFFIC SIGNS SCREEN ───────────────────────────
+class SignsScreen extends StatefulWidget {
+  const SignsScreen({super.key});
+  @override
+  State<SignsScreen> createState() => _SignsScreenState();
+}
+
+class _SignsScreenState extends State<SignsScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tab;
+  int _quizIndex = 0;
+  int? _quizAnswer;
+  bool _quizAnswered = false;
+  int _quizCorrect = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _tab = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tab.dispose();
+    super.dispose();
+  }
+
+  List<String> _quizOptions(int correctIdx) {
+    final opts = [trafficSigns[correctIdx].name];
+    final others = List<int>.generate(trafficSigns.length, (i) => i)
+      ..remove(correctIdx);
+    others.shuffle();
+    opts.addAll(others.take(3).map((i) => trafficSigns[i].name));
+    opts.shuffle();
+    return opts;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Trafik Levhaları'),
+        bottom: TabBar(
+          controller: _tab,
+          tabs: const [
+            Tab(text: 'Tüm Levhalar'),
+            Tab(text: 'Levha Quiz'),
+          ],
+          labelColor: AppColors.primaryLight,
+          unselectedLabelColor: AppColors.textSecondary,
+          indicatorColor: AppColors.primaryLight,
+        ),
+      ),
+      body: TabBarView(
+        controller: _tab,
+        children: [
+          // ALL SIGNS
+          GridView.builder(
+            padding: const EdgeInsets.all(16),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 0.9,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
+            itemCount: trafficSigns.length,
+            itemBuilder: (_, i) {
+              final s = trafficSigns[i];
+              return GestureDetector(
+                onTap: () => _showSignDetail(context, s),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceCard,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(s.emoji, style: const TextStyle(fontSize: 48)),
+                      const SizedBox(height: 8),
+                      Text(
+                        s.name,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          s.type,
+                          style: const TextStyle(
+                            color: AppColors.primaryLight,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+          // QUIZ
+          _buildQuiz(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuiz() {
+    if (_quizIndex >= trafficSigns.length) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('🏆', style: TextStyle(fontSize: 64)),
+            const SizedBox(height: 16),
+            Text(
+              'Quiz Tamamlandı!',
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w800,
+                fontSize: 22,
+              ),
+            ),
+            Text(
+              '$_quizCorrect/${trafficSigns.length} doğru',
+              style: const TextStyle(
+                color: AppColors.primaryLight,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () => setState(() {
+                _quizIndex = 0;
+                _quizAnswer = null;
+                _quizAnswered = false;
+                _quizCorrect = 0;
+              }),
+              child: const Text('Tekrar Başla'),
+            ),
+          ],
+        ),
+      );
+    }
+    final sign = trafficSigns[_quizIndex];
+    final opts = _quizOptions(_quizIndex % trafficSigns.length);
+    final correctOpt = sign.name;
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          Text(
+            'Soru ${_quizIndex + 1}/${trafficSigns.length}',
+            style: const TextStyle(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: _quizIndex / trafficSigns.length,
+              minHeight: 5,
+              backgroundColor: AppColors.surfaceLight,
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                AppColors.primaryLight,
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
+          const Text(
+            'Bu levhanın adı nedir?',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 15),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+              color: AppColors.surfaceCard,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Center(
+              child: Text(sign.emoji, style: const TextStyle(fontSize: 72)),
+            ),
+          ),
+          const SizedBox(height: 32),
+          ...opts.map((opt) {
+            Color c = AppColors.surfaceLight;
+            Color border = Colors.transparent;
+            if (_quizAnswered) {
+              if (opt == correctOpt) {
+                c = AppColors.success.withOpacity(0.2);
+                border = AppColors.success;
+              } else if (_quizAnswer != null &&
+                  opts[_quizAnswer!] == opt &&
+                  opt != correctOpt) {
+                c = AppColors.error.withOpacity(0.2);
+                border = AppColors.error;
+              }
+            }
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: GestureDetector(
+                onTap: () {
+                  if (_quizAnswered) return;
+                  final idx = opts.indexOf(opt);
+                  setState(() {
+                    _quizAnswer = idx;
+                    _quizAnswered = true;
+                    if (opt == correctOpt) _quizCorrect++;
+                  });
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 14,
+                    horizontal: 16,
+                  ),
+                  decoration: BoxDecoration(
+                    color: c,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: border, width: 2),
+                  ),
+                  child: Center(
+                    child: Text(
+                      opt,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+          if (_quizAnswered) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => setState(() {
+                  _quizIndex++;
+                  _quizAnswer = null;
+                  _quizAnswered = false;
+                }),
+                child: Text(
+                  _quizIndex < trafficSigns.length - 1
+                      ? 'Sonraki →'
+                      : 'Sonucu Gör',
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _showSignDetail(BuildContext context, TrafficSign s) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surfaceCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(s.emoji, style: const TextStyle(fontSize: 80)),
+            const SizedBox(height: 12),
+            Text(
+              s.name,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w800,
+                fontSize: 22,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                s.type,
+                style: const TextStyle(
+                  color: AppColors.primaryLight,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              s.description,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 15,
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────── PROFILE SCREEN ───────────────────────────
+class ProfileScreen extends StatelessWidget {
+  final AppState appState;
+  const ProfileScreen({super.key, required this.appState});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 220,
+            pinned: true,
+            flexibleSpace: FlexibleSpaceBar(
+              background: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF0D47A1), Color(0xFF1565C0)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                ),
+                child: SafeArea(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 88,
+                        height: 88,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white24,
+                          border: Border.all(
+                            color: AppColors.accentLight,
+                            width: 3,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.person,
+                          size: 48,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Sürücü Adayı',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 20,
+                        ),
+                      ),
+                      Text(
+                        'Seviye ${appState.level} • ${appState.xp} XP',
+                        style: const TextStyle(
+                          color: AppColors.accentLight,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.all(16),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                _SectionTitle('İstatistikler'),
+                const SizedBox(height: 12),
+                _StatsGrid(appState: appState),
+                const SizedBox(height: 24),
+                _SectionTitle('Güçlü Konular'),
+                const SizedBox(height: 12),
+                _StrengthBars(appState: appState),
+                const SizedBox(height: 24),
+                _SectionTitle('Ayarlar'),
+                const SizedBox(height: 12),
+                _SettingsCard(),
+                const SizedBox(height: 100),
+              ]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatsGrid extends StatelessWidget {
+  final AppState appState;
+  const _StatsGrid({required this.appState});
+  @override
+  Widget build(BuildContext context) {
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      childAspectRatio: 1.6,
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
+      children: [
+        _BigStatCard(
+          'Çözülen Soru',
+          '${appState.totalSolved}',
+          Icons.quiz,
+          AppColors.primaryLight,
+        ),
+        _BigStatCard(
+          'Doğru Cevap',
+          '${appState.totalCorrect}',
+          Icons.check_circle,
+          AppColors.success,
+        ),
+        _BigStatCard(
+          'Başarı Oranı',
+          '${(appState.successRate * 100).toStringAsFixed(0)}%',
+          Icons.trending_up,
+          AppColors.accentLight,
+        ),
+        _BigStatCard(
+          'Streak',
+          '${appState.currentStreak} Gün',
+          Icons.local_fire_department,
+          AppColors.error,
+        ),
+      ],
+    );
+  }
+}
+
+class _BigStatCard extends StatelessWidget {
+  final String label, value;
+  final IconData icon;
+  final Color color;
+  const _BigStatCard(this.label, this.value, this.icon, this.color);
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceCard,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Icon(icon, color: color, size: 26),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StrengthBars extends StatelessWidget {
+  final AppState appState;
+  const _StrengthBars({required this.appState});
+  @override
+  Widget build(BuildContext context) {
+    final cats = QuestionCategory.values;
+    return Column(
+      children: cats.map((cat) {
+        final score = appState.categoryScores[cat] ?? 0;
+        final total = QuestionBank.byCategory(cat).length;
+        final pct = total == 0 ? 0.0 : score / total;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(cat.icon, color: cat.color, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        cat.label,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    '$score/$total',
+                    style: TextStyle(
+                      color: cat.color,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: pct,
+                  minHeight: 7,
+                  backgroundColor: AppColors.surfaceLight,
+                  valueColor: AlwaysStoppedAnimation<Color>(cat.color),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _SettingsCard extends StatelessWidget {
+  final items = const [
+    (Icons.notifications, 'Bildirimler', 'Günlük hatırlatmalar'),
+    (Icons.dark_mode, 'Karanlık Mod', 'Aktif'),
+    (Icons.language, 'Dil', 'Türkçe'),
+    (Icons.shield, 'Gizlilik Politikası', 'KVKK uyumlu'),
+    (Icons.star, 'Premium\'a Geç', 'Reklamsız kullanım'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceCard,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: items.asMap().entries.map((e) {
+          final (icon, title, sub) = e.value;
+          final isLast = e.key == items.length - 1;
+          final isPremium = title == 'Premium\'a Geç';
+          return Column(
+            children: [
+              ListTile(
+                leading: Icon(
+                  icon,
+                  color: isPremium
+                      ? AppColors.accentLight
+                      : AppColors.primaryLight,
+                  size: 22,
+                ),
+                title: Text(
+                  title,
+                  style: TextStyle(
+                    color: isPremium
+                        ? AppColors.accentLight
+                        : AppColors.textPrimary,
+                    fontWeight: isPremium ? FontWeight.w700 : FontWeight.w500,
+                    fontSize: 15,
+                  ),
+                ),
+                subtitle: Text(
+                  sub,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+                trailing: const Icon(
+                  Icons.arrow_forward_ios,
+                  color: AppColors.textSecondary,
+                  size: 14,
+                ),
+                onTap: () {},
+              ),
+              if (!isLast)
+                const Divider(color: AppColors.surfaceLight, height: 0),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
